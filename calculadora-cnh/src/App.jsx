@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Activity, Disc, Tractor, FlaskConical, Save, Download, History, Trash2, Plus, X, ChevronDown, Info } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { Activity, Disc, Tractor, FlaskConical, Save, Download, History, Trash2, Plus, X, ChevronDown, Info, Sprout, Droplets, Wheat } from "lucide-react";
+import cnhLogo from "./assets/cnh-logo.png";
 
 /* ---------- helpers ---------- */
-const fmtBRL = (v) => (isFinite(v) ? v : 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
-const fmtNum = (v, d = 2) => (isFinite(v) ? v : 0).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtBRL = (v) => (typeof v === "number" && isFinite(v) ? v : 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
+const fmtNum = (v, d = 2) => (typeof v === "number" && isFinite(v) ? v : 0).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const todayStr = () => new Date().toLocaleDateString("pt-BR");
 
@@ -25,7 +27,7 @@ async function storageDelete(key) {
 }
 
 /* ---------- shared UI ---------- */
-function Field({ label, value, onChange, suffix, step = 1, min, hint, type = "number" }) {
+function Field({ label, value, onChange, suffix, step = 1, min, hint, type = "number", placeholder }) {
   return (
     <label className="field">
       <span className="field-label">{label}</span>
@@ -33,10 +35,11 @@ function Field({ label, value, onChange, suffix, step = 1, min, hint, type = "nu
         <input
           type={type}
           className="field-input"
-          value={value}
+          value={value === null || value === undefined ? "" : value}
           min={min}
           step={step}
-          onChange={(e) => onChange(type === "number" ? (e.target.value === "" ? 0 : parseFloat(e.target.value)) : e.target.value)}
+          placeholder={placeholder}
+          onChange={(e) => onChange(type === "number" ? (e.target.value === "" ? null : parseFloat(e.target.value)) : e.target.value)}
         />
         {suffix && <span className="field-suffix">{suffix}</span>}
       </div>
@@ -148,14 +151,14 @@ const CV_REF_POR_CULTURA = { soja: 50, milho: 30 };
 function TabPlantabilidade() {
   const [cliente, setCliente] = useState("");
   const [cultura, setCultura] = useState("soja");
-  const [sementesM, setSementesM] = useState(12);
-  const [espLinha, setEspLinha] = useState(0.45);
+  const [sementesM, setSementesM] = useState(null);
+  const [espLinha, setEspLinha] = useState(null);
   const [posicoes, setPosicoes] = useState([]);
   const [novaPosicao, setNovaPosicao] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [cvRef, setCvRef] = useState(CV_REF_POR_CULTURA.soja);
-  const [precoSaca, setPrecoSaca] = useState(63);
-  const [areaProp, setAreaProp] = useState(500);
+  const [precoSaca, setPrecoSaca] = useState(null);
+  const [areaProp, setAreaProp] = useState(null);
 
   const trocarCultura = (c) => { setCultura(c); setCvRef(CV_REF_POR_CULTURA[c]); };
 
@@ -200,12 +203,12 @@ function TabPlantabilidade() {
   const loadRecord = (rec) => {
     setCliente(rec.cliente ?? "");
     setCultura(rec.cultura ?? "soja");
-    setSementesM(rec.sementesM ?? 12);
-    setEspLinha(rec.espLinha ?? 0.45);
+    setSementesM(rec.sementesM ?? null);
+    setEspLinha(rec.espLinha ?? null);
     setPosicoes(rec.posicoes ?? []);
     setCvRef(rec.cvRef ?? CV_REF_POR_CULTURA[rec.cultura ?? "soja"]);
-    setPrecoSaca(rec.precoSaca ?? 63);
-    setAreaProp(rec.areaProp ?? 500);
+    setPrecoSaca(rec.precoSaca ?? null);
+    setAreaProp(rec.areaProp ?? null);
   };
 
   return (
@@ -222,8 +225,8 @@ function TabPlantabilidade() {
             <Segmented value={cultura} onChange={trocarCultura} options={[{ value: "soja", label: "Soja" }, { value: "milho", label: "Milho" }]} />
           </div>
           <div className="card-grid">
-            <Field label="Sementes por metro" value={sementesM} onChange={setSementesM} suffix="sem/m" step={0.1} />
-            <Field label="Espaçamento entrelinhas" value={espLinha} onChange={setEspLinha} suffix="m" step={0.01} />
+            <Field label="Sementes por metro" value={sementesM} onChange={setSementesM} suffix="sem/m" step={0.1} placeholder="12" />
+            <Field label="Espaçamento entrelinhas" value={espLinha} onChange={setEspLinha} suffix="m" step={0.01} placeholder="0.45" />
           </div>
           <div className="mini-stats">
             <Stat label="População/ha" value={fmtNum(populacaoHa, 0)} />
@@ -276,8 +279,8 @@ function TabPlantabilidade() {
         <div className="card-title">Monetização do teste medido</div>
         <p className="card-note">Converte o % de falhas efetivamente medido acima em R$, usando a mesma referência de peso por {unidadeLabel} da aba de disco — independente do cálculo teórico de 1 falha por volta.</p>
         <div className="card-grid">
-          <Field label="Preço da saca no dia" value={precoSaca} onChange={setPrecoSaca} suffix="R$" step={0.5} />
-          <Field label="Tamanho da propriedade" value={areaProp} onChange={setAreaProp} suffix="ha" />
+          <Field label="Preço da saca no dia" value={precoSaca} onChange={setPrecoSaca} suffix="R$" step={0.5} placeholder="63" />
+          <Field label="Tamanho da propriedade" value={areaProp} onChange={setAreaProp} suffix="ha" placeholder="500" />
         </div>
         <div className="result-band" style={{ marginTop: 14, marginBottom: 0 }}>
           <Stat label="Falha medida em campo" value={fmtNum(pct(falhas), 1) + "%"} tone={n ? "red" : undefined} />
@@ -301,10 +304,10 @@ function TabPlantabilidade() {
 function TabDisco() {
   const [cliente, setCliente] = useState("");
   const [cultura, setCultura] = useState("milho");
-  const [sementesM, setSementesM] = useState(3);
-  const [espLinha, setEspLinha] = useState(0.45);
-  const [preco, setPreco] = useState(63);
-  const [area, setArea] = useState(500);
+  const [sementesM, setSementesM] = useState(null);
+  const [espLinha, setEspLinha] = useState(null);
+  const [preco, setPreco] = useState(null);
+  const [area, setArea] = useState(null);
 
   const furos = cultura === "soja" ? 56 : 27;
   const gPorUnidade = cultura === "soja" ? 20 : 200;
@@ -320,8 +323,8 @@ function TabDisco() {
   const perdaTotal = perdaRsHa * area;
 
   const loadRecord = (rec) => {
-    setCliente(rec.cliente ?? ""); setCultura(rec.cultura ?? "milho"); setSementesM(rec.sementesM ?? 3);
-    setPreco(rec.preco ?? 63); setEspLinha(rec.espLinha ?? 0.45); setArea(rec.area ?? 500);
+    setCliente(rec.cliente ?? ""); setCultura(rec.cultura ?? "milho"); setSementesM(rec.sementesM ?? null);
+    setPreco(rec.preco ?? null); setEspLinha(rec.espLinha ?? null); setArea(rec.area ?? null);
   };
 
   return (
@@ -337,10 +340,10 @@ function TabDisco() {
           <Segmented value={cultura} onChange={setCultura} options={[{ value: "soja", label: "Soja (56 furos)" }, { value: "milho", label: "Milho (27 furos)" }]} />
         </div>
         <div className="card-grid">
-          <Field label="Sementes por metro" value={sementesM} onChange={setSementesM} suffix="sem/m" step={0.1} />
-          <Field label="Espaçamento entrelinhas" value={espLinha} onChange={setEspLinha} suffix="m" step={0.01} />
-          <Field label="Preço da saca no dia" value={preco} onChange={setPreco} suffix="R$" step={0.5} />
-          <Field label="Tamanho da propriedade" value={area} onChange={setArea} suffix="ha" />
+          <Field label="Sementes por metro" value={sementesM} onChange={setSementesM} suffix="sem/m" step={0.1} placeholder="3" />
+          <Field label="Espaçamento entrelinhas" value={espLinha} onChange={setEspLinha} suffix="m" step={0.01} placeholder="0.45" />
+          <Field label="Preço da saca no dia" value={preco} onChange={setPreco} suffix="R$" step={0.5} placeholder="63" />
+          <Field label="Tamanho da propriedade" value={area} onChange={setArea} suffix="ha" placeholder="500" />
         </div>
       </div>
 
@@ -365,12 +368,12 @@ function TabDisco() {
 /* ================= TAB 3 — DIMENSIONAMENTO DE PLANTADEIRA ================= */
 function TabDimensionamento() {
   const [cliente, setCliente] = useState("");
-  const [areaTotal, setAreaTotal] = useState(1000);
-  const [janela, setJanela] = useState(20);
-  const [espacamento, setEspacamento] = useState(0.5);
-  const [velocidade, setVelocidade] = useState(6.5);
-  const [jornada, setJornada] = useState(12);
-  const [eficiencia, setEficiencia] = useState(70);
+  const [areaTotal, setAreaTotal] = useState(null);
+  const [janela, setJanela] = useState(null);
+  const [espacamento, setEspacamento] = useState(null);
+  const [velocidade, setVelocidade] = useState(null);
+  const [jornada, setJornada] = useState(null);
+  const [eficiencia, setEficiencia] = useState(null);
 
   const capacidadeLinhaHaH = (velocidade * espacamento / 10) * (eficiencia / 100);
   const horasDisponiveis = janela * jornada;
@@ -384,9 +387,9 @@ function TabDimensionamento() {
   }));
 
   const loadRecord = (rec) => {
-    setCliente(rec.cliente ?? ""); setAreaTotal(rec.areaTotal ?? 1000); setJanela(rec.janela ?? 20);
-    setEspacamento(rec.espacamento ?? 0.5); setVelocidade(rec.velocidade ?? 6.5);
-    setJornada(rec.jornada ?? 12); setEficiencia(rec.eficiencia ?? 70);
+    setCliente(rec.cliente ?? ""); setAreaTotal(rec.areaTotal ?? null); setJanela(rec.janela ?? null);
+    setEspacamento(rec.espacamento ?? null); setVelocidade(rec.velocidade ?? null);
+    setJornada(rec.jornada ?? null); setEficiencia(rec.eficiencia ?? null);
   };
 
   return (
@@ -398,12 +401,12 @@ function TabDimensionamento() {
       <div className="card">
         <div className="card-title">Parâmetros</div>
         <div className="card-grid">
-          <Field label="Área total plantada" value={areaTotal} onChange={setAreaTotal} suffix="ha" />
-          <Field label="Janela de plantio" value={janela} onChange={setJanela} suffix="dias" />
-          <Field label="Espaçamento" value={espacamento} onChange={setEspacamento} suffix="m" step={0.01} />
-          <Field label="Velocidade de plantio" value={velocidade} onChange={setVelocidade} suffix="km/h" step={0.1} />
-          <Field label="Jornada de trabalho" value={jornada} onChange={setJornada} suffix="h/dia" />
-          <Field label="Eficiência operacional" value={eficiencia} onChange={setEficiencia} suffix="%" step={1} />
+          <Field label="Área total plantada" value={areaTotal} onChange={setAreaTotal} suffix="ha" placeholder="1000" />
+          <Field label="Janela de plantio" value={janela} onChange={setJanela} suffix="dias" placeholder="20" />
+          <Field label="Espaçamento" value={espacamento} onChange={setEspacamento} suffix="m" step={0.01} placeholder="0.5" />
+          <Field label="Velocidade de plantio" value={velocidade} onChange={setVelocidade} suffix="km/h" step={0.1} placeholder="6.5" />
+          <Field label="Jornada de trabalho" value={jornada} onChange={setJornada} suffix="h/dia" placeholder="12" />
+          <Field label="Eficiência operacional" value={eficiencia} onChange={setEficiencia} suffix="%" step={1} placeholder="70" />
         </div>
       </div>
 
@@ -442,11 +445,11 @@ function TabDimensionamento() {
 /* ================= TAB 4 — REGULAGEM DE TAXA DE FERTILIZANTE ================= */
 function TabFertilizante() {
   const [cliente, setCliente] = useState("");
-  const [kgHa, setKgHa] = useState(300);
-  const [espacamento, setEspacamento] = useState(0.45);
-  const [distColeta, setDistColeta] = useState(50);
-  const [numLinhas, setNumLinhas] = useState(15);
-  const [tolerancia, setTolerancia] = useState(10);
+  const [kgHa, setKgHa] = useState(null);
+  const [espacamento, setEspacamento] = useState(null);
+  const [distColeta, setDistColeta] = useState(null);
+  const [numLinhas, setNumLinhas] = useState(null);
+  const [tolerancia, setTolerancia] = useState(null);
   const [valores, setValores] = useState({});
 
   const idealG = kgHa / 10000 * espacamento * distColeta * 1000;
@@ -466,9 +469,9 @@ function TabFertilizante() {
   };
 
   const loadRecord = (rec) => {
-    setCliente(rec.cliente ?? ""); setKgHa(rec.kgHa ?? 300); setEspacamento(rec.espacamento ?? 0.45);
-    setDistColeta(rec.distColeta ?? 50); setNumLinhas(rec.numLinhas ?? 15);
-    setTolerancia(rec.tolerancia ?? 10); setValores(rec.valores ?? {});
+    setCliente(rec.cliente ?? ""); setKgHa(rec.kgHa ?? null); setEspacamento(rec.espacamento ?? null);
+    setDistColeta(rec.distColeta ?? null); setNumLinhas(rec.numLinhas ?? null);
+    setTolerancia(rec.tolerancia ?? null); setValores(rec.valores ?? {});
   };
 
   return (
@@ -480,11 +483,11 @@ function TabFertilizante() {
       <div className="card">
         <div className="card-title">Parâmetros do teste</div>
         <div className="card-grid">
-          <Field label="Taxa alvo" value={kgHa} onChange={setKgHa} suffix="kg/ha" step={1} />
-          <Field label="Espaçamento entre linhas" value={espacamento} onChange={setEspacamento} suffix="m" step={0.01} />
-          <Field label="Distância de coleta" value={distColeta} onChange={setDistColeta} suffix="m" step={1} />
-          <Field label="Número de linhas" value={numLinhas} onChange={setNumLinhas} suffix="linhas" step={1} />
-          <Field label="Tolerância aceitável" value={tolerancia} onChange={setTolerancia} suffix="%" step={1} hint="Desvio máximo em relação ao ideal por linha" />
+          <Field label="Taxa alvo" value={kgHa} onChange={setKgHa} suffix="kg/ha" step={1} placeholder="300" />
+          <Field label="Espaçamento entre linhas" value={espacamento} onChange={setEspacamento} suffix="m" step={0.01} placeholder="0.45" />
+          <Field label="Distância de coleta" value={distColeta} onChange={setDistColeta} suffix="m" step={1} placeholder="50" />
+          <Field label="Número de linhas" value={numLinhas} onChange={setNumLinhas} suffix="linhas" step={1} placeholder="15" />
+          <Field label="Tolerância aceitável" value={tolerancia} onChange={setTolerancia} suffix="%" step={1} hint="Desvio máximo em relação ao ideal por linha" placeholder="10" />
         </div>
       </div>
 
@@ -529,88 +532,181 @@ function PrintButton() {
   );
 }
 
+/* ================= SETOR EM CONSTRUÇÃO (placeholder) ================= */
+function TabPlaceholder({ setor }) {
+  return (
+    <div className="module">
+      <div className="placeholder-block">
+        <Info size={22} strokeWidth={1.6} />
+        <h2>Calculadoras de {setor} em construção</h2>
+        <p>Esta seção já está criada na navegação. Assim que as fórmulas e os campos de cada cálculo forem definidos, as abas de {setor} entram aqui — no mesmo padrão das calculadoras de Plantadeiras.</p>
+      </div>
+    </div>
+  );
+}
+
 /* ================= APP SHELL ================= */
-const TABS = [
-  { id: "plantabilidade", label: "Plantabilidade", icon: Activity, Comp: TabPlantabilidade },
-  { id: "disco", label: "Perda por disco", icon: Disc, Comp: TabDisco },
-  { id: "dimensionamento", label: "Dimensionamento", icon: Tractor, Comp: TabDimensionamento },
-  { id: "fertilizante", label: "Fertilizante", icon: FlaskConical, Comp: TabFertilizante },
+const SETORES = [
+  {
+    id: "plantadeiras",
+    label: "Plantadeira",
+    icon: Sprout,
+    tabs: [
+      { id: "plantabilidade", label: "Plantabilidade", icon: Activity, Comp: TabPlantabilidade },
+      { id: "disco", label: "Perda por disco", icon: Disc, Comp: TabDisco },
+      { id: "dimensionamento", label: "Dimensionamento", icon: Tractor, Comp: TabDimensionamento },
+      { id: "fertilizante", label: "Fertilizante", icon: FlaskConical, Comp: TabFertilizante },
+    ],
+  },
+  {
+    id: "tratores",
+    label: "Trator",
+    icon: Tractor,
+    tabs: [
+      { id: "em-breve", label: "Em breve", icon: Info, Comp: () => <TabPlaceholder setor="Tratores" /> },
+    ],
+  },
+  {
+    id: "pulverizadores",
+    label: "Pulverizador",
+    icon: Droplets,
+    tabs: [
+      { id: "em-breve", label: "Em breve", icon: Info, Comp: () => <TabPlaceholder setor="Pulverizadores" /> },
+    ],
+  },
+  {
+    id: "colhedoras",
+    label: "Colhedora",
+    icon: Wheat,
+    tabs: [
+      { id: "em-breve", label: "Em breve", icon: Info, Comp: () => <TabPlaceholder setor="Colhedoras" /> },
+    ],
+  },
 ];
 
 export default function App() {
-  const [tab, setTab] = useState("plantabilidade");
-  const Active = TABS.find((t) => t.id === tab).Comp;
+  const [activeSetorId, setActiveSetorId] = useState(SETORES[0].id);
+  const [activeTabId, setActiveTabId] = useState(SETORES[0].tabs[0].id);
+  const [openSetor, setOpenSetor] = useState(null);
+  const [menuPos, setMenuPos] = useState(null);
+  const dropdownRef = useRef(null);
+
+  const activeSetor = SETORES.find((s) => s.id === activeSetorId);
+  const activeTabDef = activeSetor.tabs.find((t) => t.id === activeTabId) || activeSetor.tabs[0];
+  const Active = activeTabDef.Comp;
+
+  const fecharMenu = useCallback(() => { setOpenSetor(null); setMenuPos(null); }, []);
+
+  const selecionarAba = (setorId, tabId) => {
+    setActiveSetorId(setorId);
+    setActiveTabId(tabId);
+    fecharMenu();
+  };
+
+  const toggleSetor = (setorId, e) => {
+    if (openSetor === setorId) { fecharMenu(); return; }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenuPos({ left: rect.left, top: rect.bottom });
+    setOpenSetor(setorId);
+  };
+
+  useEffect(() => {
+    if (!openSetor) return;
+    const onDocClick = (e) => {
+      if (dropdownRef.current && dropdownRef.current.contains(e.target)) return;
+      if (e.target.closest && e.target.closest(".setor-menu")) return;
+      fecharMenu();
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [openSetor, fecharMenu]);
 
   return (
     <div className="app">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
-        .app{
+        :root{
           --bg:#EEF0F3; --panel:#FFFFFF; --panel-2:#F5F6F8; --line:#DCE0E6;
           --text:#181B20; --muted:#6A727D; --red:#B23A3A; --red-soft:#F7E9E9;
           --blue:#2E3542; --blue-soft:#E7E9EC; --steel:#14171B;
+        }
+        .app{
           font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text);
           border-radius:12px; overflow:hidden; min-height:100vh; display:flex; flex-direction:column;
         }
         .app *{box-sizing:border-box;}
         .topbar{ background:var(--steel); padding:0 22px; display:flex; align-items:center; gap:4px; overflow-x:auto; }
-        .brand{ font-family:'Oswald',sans-serif; color:#fff; font-size:15px; letter-spacing:0.03em; padding:16px 18px 16px 0; margin-right:8px; border-right:1px solid #2B3540; display:flex; flex-direction:column; }
-        .brand-sub{ font-size:9.5px; color:#9AA1AB; letter-spacing:0.14em; text-transform:uppercase; margin-top:2px; font-family:'Inter',sans-serif; font-weight:600; }
-        .tabbtn{ display:flex; align-items:center; gap:7px; padding:16px 14px; color:#9AA4B2; font-size:12.5px; font-weight:500; cursor:pointer; border-bottom:2.5px solid transparent; white-space:nowrap; }
+        .brand{ font-family:'Oswald',sans-serif; color:#fff; font-size:17px; letter-spacing:0.03em; padding:13px 18px 13px 0; margin-right:8px; border-right:1px solid #2B3540; display:flex; align-items:center; gap:8px; }
+        .brand-logo{ height:32px; width:auto; display:inline-block; filter:brightness(0) invert(1); }
+        .tabbtn{ display:flex; align-items:center; gap:8px; padding:14px 15px; color:#9AA4B2; font-size:15px; font-weight:500; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap; }
         .tabbtn:hover{ color:#fff; }
         .tabbtn.active{ color:#fff; border-bottom-color:#6B7280; }
-        .content{ flex:1; padding:28px 34px 46px; max-width:920px; width:100%; margin:0 auto; }
-        .eyebrow{ font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--blue); font-weight:600; }
-        h1{ font-family:'Oswald',sans-serif; font-size:22px; margin:2px 0 0; font-weight:600; }
+        .setor-menu{ position:relative; }
+        .setor-caret{ margin-left:1px; transition:transform 0.15s ease; }
+        .setor-dropdown-backdrop{ position:fixed; inset:0; background:rgba(8,10,14,0.5); z-index:999; pointer-events:none; }
+        .setor-dropdown{ position:fixed; font-family:'Inter',system-ui,sans-serif; box-sizing:border-box; background:var(--panel); border:2px solid var(--steel); border-radius:0 0 12px 12px; box-shadow:0 20px 40px rgba(0,0,0,0.35); min-width:230px; z-index:1000; overflow:hidden; }
+        .setor-dropdown *{ box-sizing:border-box; }
+        .dropdown-item{ display:flex; align-items:center; gap:10px; padding:13px 18px; font-size:15.5px; font-weight:600; color:var(--text); cursor:pointer; white-space:nowrap; border-bottom:1px solid var(--line); }
+        .dropdown-item:last-child{ border-bottom:none; }
+        .dropdown-item:hover{ background:var(--panel-2); }
+        .dropdown-item.active{ background:var(--blue-soft); color:var(--blue); }
+        .placeholder-block{ display:flex; flex-direction:column; align-items:flex-start; gap:10px; background:var(--panel); border:1px dashed var(--line); border-radius:12px; padding:34px 28px; color:var(--muted); }
+        .placeholder-block h2{ font-family:'Oswald',sans-serif; font-size:20px; color:var(--text); margin:0; }
+        .placeholder-block p{ font-size:15px; line-height:1.6; margin:0; max-width:480px; }
+        .content{ flex:1; padding:28px 34px 46px; max-width:960px; width:100%; margin:0 auto; }
+        .eyebrow{ font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--blue); font-weight:600; }
+        h1{ font-family:'Oswald',sans-serif; font-size:27px; margin:2px 0 0; font-weight:600; }
         .tab-header{ margin-bottom:22px; }
         .tab-header-top{ display:flex; gap:12px; align-items:center; }
-        .tab-icon{ width:38px; height:38px; border-radius:9px; background:#E7E9EC; color:#2E3542; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-        .tab-desc{ color:var(--muted); font-size:13px; line-height:1.5; margin:8px 0 14px; max-width:600px; }
-        .cliente-row{ max-width:340px; }
-        .card{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:16px; }
-        .card-title{ font-family:'Oswald',sans-serif; font-size:13.5px; font-weight:600; margin-bottom:14px; color:var(--steel); }
-        .card-note{ font-size:11.5px; color:var(--muted); line-height:1.5; margin:-8px 0 14px; }
-        .card-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px 16px; }
+        .tab-icon{ width:42px; height:42px; border-radius:9px; background:#E7E9EC; color:#2E3542; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        .tab-desc{ color:var(--muted); font-size:15px; line-height:1.55; margin:8px 0 14px; max-width:640px; }
+        .cliente-row{ max-width:360px; }
+        .card{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin-bottom:16px; }
+        .card-title{ font-family:'Oswald',sans-serif; font-size:16px; font-weight:600; margin-bottom:14px; color:var(--steel); }
+        .card-note{ font-size:13.5px; color:var(--muted); line-height:1.55; margin:-8px 0 14px; }
+        .card-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px 16px; }
         .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
         @media(max-width:680px){ .grid-2{ grid-template-columns:1fr; } }
         @media(max-width:640px){
           .content{ padding:18px 14px 32px; }
-          .brand{ padding:12px 12px 12px 0; font-size:12.5px; margin-right:4px; }
-          .brand-sub{ font-size:8.5px; }
-          .tabbtn{ padding:12px 9px; font-size:11px; gap:5px; }
+          .brand{ padding:12px 12px 12px 0; font-size:16px; margin-right:4px; }
+          .brand-logo{ height:30px; }
+          .tabbtn{ padding:14px 11px; font-size:14px; gap:6px; }
           .card{ padding:14px 15px; }
-          h1{ font-size:18px; }
+          h1{ font-size:21px; }
           .tab-header-top{ gap:9px; }
-          .tab-icon{ width:32px; height:32px; }
+          .tab-icon{ width:34px; height:34px; }
           .result-band{ gap:8px; }
           .stat{ min-width:calc(50% - 5px); flex:none; padding:9px 11px; }
-          .stat-value{ font-size:15px; }
+          .stat-value{ font-size:18px; }
           .card-grid{ grid-template-columns:1fr 1fr; gap:10px 12px; }
           .linhas-grid{ grid-template-columns:repeat(4,1fr); }
-          .table{ font-size:12px; }
+          .table{ font-size:14px; }
+          .dropdown-item{ font-size:14.5px; padding:12px 16px; }
         }
         @media(max-width:380px){
           .card-grid{ grid-template-columns:1fr; }
           .stat{ min-width:100%; }
         }
-        .field{ display:flex; flex-direction:column; gap:5px; }
-        .field-label{ font-size:11.5px; color:var(--muted); font-weight:500; }
+        .field{ display:flex; flex-direction:column; gap:6px; }
+        .field-label{ font-size:13.5px; color:var(--muted); font-weight:500; }
         .field-row{ display:flex; align-items:center; background:var(--panel-2); border:1px solid var(--line); border-radius:7px; overflow:hidden; }
-        .field-input{ background:transparent; border:none; outline:none; padding:8px 10px; font-family:'IBM Plex Mono',monospace; font-size:13px; width:100%; color:var(--text); }
+        .field-input{ background:transparent; border:none; outline:none; padding:11px 12px; font-family:'IBM Plex Mono',monospace; font-size:16px; width:100%; color:var(--text); }
         .field-input:focus-visible{ outline:2px solid var(--blue); outline-offset:-2px; }
-        .field-suffix{ padding:0 10px; font-size:10.5px; color:var(--muted); border-left:1px solid var(--line); align-self:stretch; display:flex; align-items:center; }
-        .field-hint{ font-size:10px; color:var(--muted); line-height:1.3; }
+        .field-input::placeholder{ color:#A7ADB6; }
+        .field-suffix{ padding:0 12px; font-size:12.5px; color:var(--muted); border-left:1px solid var(--line); align-self:stretch; display:flex; align-items:center; }
+        .field-hint{ font-size:12px; color:var(--muted); line-height:1.35; }
         .mini-stats{ display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
-        .stat{ background:var(--panel-2); border:1px solid var(--line); border-radius:9px; padding:10px 14px; min-width:100px; flex:1; }
-        .stat-value{ font-family:'IBM Plex Mono',monospace; font-size:17px; font-weight:600; }
-        .stat-label{ font-size:10px; color:var(--muted); margin-top:2px; }
+        .stat{ background:var(--panel-2); border:1px solid var(--line); border-radius:9px; padding:12px 16px; min-width:110px; flex:1; }
+        .stat-value{ font-family:'IBM Plex Mono',monospace; font-size:21px; font-weight:600; }
+        .stat-label{ font-size:12px; color:var(--muted); margin-top:2px; }
         .tone-red .stat-value{ color:var(--red); }
         .tone-blue .stat-value{ color:var(--blue); }
         .result-band{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
-        .result-band .stat{ min-width:120px; }
+        .result-band .stat{ min-width:130px; }
         .add-row{ display:flex; gap:8px; margin-bottom:12px; }
         .add-row .field-input{ background:var(--panel-2); border:1px solid var(--line); border-radius:7px; }
-        .btn{ display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:7px; cursor:pointer; border:1px solid transparent; white-space:nowrap; }
+        .btn{ display:inline-flex; align-items:center; gap:7px; font-size:15px; font-weight:600; padding:10px 16px; border-radius:7px; cursor:pointer; border:1px solid transparent; white-space:nowrap; }
         .btn-primary{ background:var(--steel); color:#fff; }
         .btn-primary:hover{ background:#232d38; }
         .btn-outline{ background:#fff; border-color:var(--line); color:var(--text); }
@@ -619,40 +715,40 @@ export default function App() {
         .btn-ghost:hover{ color:var(--text); }
         .btn-print{ margin-top:4px; }
         .chips{ display:flex; gap:7px; flex-wrap:wrap; }
-        .chip{ display:flex; align-items:center; gap:5px; padding:5px 9px; border-radius:20px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; border:1px solid var(--line); }
-        .chip-delta{ opacity:0.65; font-size:10px; }
+        .chip{ display:flex; align-items:center; gap:5px; padding:6px 11px; border-radius:20px; font-family:'IBM Plex Mono',monospace; font-size:13.5px; border:1px solid var(--line); }
+        .chip-delta{ opacity:0.65; font-size:12px; }
         .chip svg{ cursor:pointer; opacity:0.55; }
         .chip svg:hover{ opacity:1; }
         .chip-aceitavel{ background:var(--blue-soft); color:var(--blue); border-color:transparent; }
         .chip-falha{ background:var(--red-soft); color:var(--red); border-color:transparent; }
         .chip-duplo{ background:#FCE9D9; color:#9A5A16; border-color:transparent; }
-        .empty-note{ color:var(--muted); font-size:12px; }
+        .empty-note{ color:var(--muted); font-size:14px; }
         .segmented{ display:inline-flex; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:3px; margin:6px 0 14px; }
-        .seg-btn{ padding:7px 12px; font-size:12px; font-weight:500; border-radius:6px; color:var(--muted); cursor:pointer; }
+        .seg-btn{ padding:9px 15px; font-size:14.5px; font-weight:500; border-radius:6px; color:var(--muted); cursor:pointer; }
         .seg-btn.active{ background:var(--steel); color:#fff; }
         .cultura-row{ display:flex; flex-direction:column; }
-        .ref-row{ max-width:260px; margin-bottom:14px; }
-        .alert-note{ display:flex; gap:9px; align-items:flex-start; background:var(--blue-soft); color:var(--blue); border:1px solid #C9D6EF; border-radius:9px; padding:10px 13px; font-size:11.5px; line-height:1.5; margin-bottom:14px; }
+        .ref-row{ max-width:280px; margin-bottom:14px; }
+        .alert-note{ display:flex; gap:9px; align-items:flex-start; background:var(--blue-soft); color:var(--blue); border:1px solid #C9D6EF; border-radius:9px; padding:12px 15px; font-size:13.5px; line-height:1.55; margin-bottom:14px; }
         .alert-note svg{ flex-shrink:0; margin-top:1.5px; }
-        .print-foot{ font-size:10.5px; color:var(--muted); line-height:1.5; border-top:1px solid var(--line); padding-top:10px; margin-bottom:16px; }
-        .table{ width:100%; border-collapse:collapse; font-size:13px; }
-        .table th{ text-align:left; color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; padding:6px 8px; border-bottom:1px solid var(--line); }
-        .table td{ padding:8px; border-bottom:1px solid var(--line); }
+        .print-foot{ font-size:12px; color:var(--muted); line-height:1.55; border-top:1px solid var(--line); padding-top:10px; margin-bottom:16px; }
+        .table{ width:100%; border-collapse:collapse; font-size:15px; }
+        .table th{ text-align:left; color:var(--muted); font-weight:500; font-size:12.5px; text-transform:uppercase; letter-spacing:0.04em; padding:7px 8px; border-bottom:1px solid var(--line); }
+        .table td{ padding:9px 8px; border-bottom:1px solid var(--line); }
         .table .mono{ font-family:'IBM Plex Mono',monospace; font-weight:600; }
-        .linhas-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:8px; }
-        .linha-box{ display:flex; flex-direction:column; gap:4px; background:var(--panel-2); border:1.5px solid var(--line); border-radius:8px; padding:7px 8px; }
-        .linha-box input{ background:transparent; border:none; outline:none; font-family:'IBM Plex Mono',monospace; font-size:12.5px; width:100%; color:var(--text); }
-        .linha-label{ font-size:9.5px; color:var(--muted); font-weight:600; }
+        .linhas-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:8px; }
+        .linha-box{ display:flex; flex-direction:column; gap:4px; background:var(--panel-2); border:1.5px solid var(--line); border-radius:8px; padding:8px 9px; }
+        .linha-box input{ background:transparent; border:none; outline:none; font-family:'IBM Plex Mono',monospace; font-size:14.5px; width:100%; color:var(--text); }
+        .linha-label{ font-size:11px; color:var(--muted); font-weight:600; }
         .linha-box.dentro{ border-color:var(--blue); }
         .linha-box.fora{ border-color:var(--red); background:var(--red-soft); }
         .history-block{ margin-top:8px; border-top:1px solid var(--line); padding-top:14px; }
         .history-actions{ display:flex; gap:10px; }
         .history-list{ margin-top:10px; display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; }
-        .history-empty{ font-size:12px; color:var(--muted); padding:6px 2px; }
-        .history-item{ display:flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+        .history-empty{ font-size:14px; color:var(--muted); padding:6px 2px; }
+        .history-item{ display:flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:9px 11px; }
         .history-item-main{ flex:1; display:flex; justify-content:space-between; gap:10px; cursor:pointer; }
-        .history-item-title{ font-size:12.5px; font-weight:500; }
-        .history-item-sub{ font-size:11px; color:var(--muted); }
+        .history-item-title{ font-size:14.5px; font-weight:500; }
+        .history-item-sub{ font-size:13px; color:var(--muted); }
         .icon-btn{ color:var(--muted); padding:4px; border-radius:5px; }
         .icon-btn:hover{ color:var(--red); background:var(--red-soft); }
         @media print{
@@ -665,13 +761,39 @@ export default function App() {
       `}</style>
 
       <nav className="topbar no-print">
-        <div className="brand">Calculadora CNH<span className="brand-sub">Plantabilidade</span></div>
-        {TABS.map((t) => (
-          <div key={t.id} className={"tabbtn" + (tab === t.id ? " active" : "")} onClick={() => setTab(t.id)}>
-            <t.icon size={15} strokeWidth={1.8} /> {t.label}
+        <div className="brand">
+          Calculadora <img src={cnhLogo} alt="CNH" className="brand-logo" />
+        </div>
+        {SETORES.map((setor) => (
+          <div key={setor.id} className="setor-menu">
+            <div
+              className={"tabbtn" + (activeSetorId === setor.id ? " active" : "")}
+              onClick={(e) => toggleSetor(setor.id, e)}
+            >
+              <setor.icon size={17} strokeWidth={1.8} /> {setor.label}
+              <ChevronDown size={14} className="setor-caret" style={{ transform: openSetor === setor.id ? "rotate(180deg)" : "none" }} />
+            </div>
           </div>
         ))}
       </nav>
+
+      {openSetor && menuPos && createPortal(
+        <>
+          <div className="setor-dropdown-backdrop" />
+          <div ref={dropdownRef} className="setor-dropdown" style={{ left: menuPos.left, top: menuPos.top }}>
+            {SETORES.find((s) => s.id === openSetor).tabs.map((t) => (
+              <div
+                key={t.id}
+                className={"dropdown-item" + (activeSetorId === openSetor && activeTabId === t.id ? " active" : "")}
+                onClick={() => selecionarAba(openSetor, t.id)}
+              >
+                <t.icon size={17} strokeWidth={1.8} /> {t.label}
+              </div>
+            ))}
+          </div>
+        </>,
+        document.body
+      )}
 
       <div className="content">
         <Active />
