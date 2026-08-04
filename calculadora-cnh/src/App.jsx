@@ -811,7 +811,7 @@ export default function App() {
         <div className="aviso-bar no-print">
           <Info size={16} strokeWidth={1.8} />
           <span className="aviso-bar-text">
-            Este aplicativo foi desenvolvido pelo <strong>time de Marketing Tático</strong>. Encontrou algum erro ou tem alguma sugestão de melhoria? Fale com o time de Marketing Tático.
+            Desenvolvido pelo <strong>time de Marketing Tático</strong>. Encontrou algum erro ou tem alguma sugestão de melhoria? Fale com a gente.
           </span>
           <button className="icon-btn aviso-bar-close" onClick={() => setAvisoVisivel(false)} aria-label="Fechar aviso">
             <X size={16} />
