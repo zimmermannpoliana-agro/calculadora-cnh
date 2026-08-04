@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Activity, Disc, Tractor, FlaskConical, Save, Download, History, Trash2, Plus, X, ChevronDown, Info, Sprout, Droplets, Wheat } from "lucide-react";
+import { Activity, Disc, Tractor, FlaskConical, Save, Download, History, Trash2, Plus, X, ChevronDown, Info, Sprout, Droplets, Wheat, Cylinder } from "lucide-react";
 import cnhLogo from "./assets/cnh-logo.png";
 
 /* ---------- helpers ---------- */
@@ -376,15 +376,22 @@ function TabDimensionamento() {
   const [eficiencia, setEficiencia] = useState(null);
 
   const capacidadeLinhaHaH = (velocidade * espacamento / 10) * (eficiencia / 100);
+  const areaPorLinhaDia = capacidadeLinhaHaH * jornada;
   const horasDisponiveis = janela * jornada;
   const areaPorLinhaSafra = capacidadeLinhaHaH * horasDisponiveis;
   const linhasNecessarias = areaPorLinhaSafra > 0 ? areaTotal / areaPorLinhaSafra : 0;
   const linhasArredondado = Math.ceil(linhasNecessarias);
 
-  const cenarios = [85, 70, 50].map((ef) => ({
-    ef,
-    haTurno: linhasArredondado * espacamento * velocidade / 10 * jornada * (ef / 100),
-  }));
+  const cenarios = [85, 70, 50].map((ef) => {
+    const capacidadeEf = (velocidade * espacamento / 10) * (ef / 100);
+    const areaPorLinhaSafraEf = capacidadeEf * horasDisponiveis;
+    const linhasNecessariasEf = areaPorLinhaSafraEf > 0 ? areaTotal / areaPorLinhaSafraEf : 0;
+    return {
+      ef,
+      haTurno: linhasArredondado * espacamento * velocidade / 10 * jornada * (ef / 100),
+      linhasRecomendadasEf: Math.ceil(linhasNecessariasEf),
+    };
+  });
 
   const loadRecord = (rec) => {
     setCliente(rec.cliente ?? ""); setAreaTotal(rec.areaTotal ?? null); setJanela(rec.janela ?? null);
@@ -417,6 +424,7 @@ function TabDimensionamento() {
 
       <div className="result-band">
         <Stat label="Capacidade por linha" value={fmtNum(capacidadeLinhaHaH, 3) + " ha/h"} />
+        <Stat label="Área por linha/dia" value={fmtNum(areaPorLinhaDia, 2) + " ha"} />
         <Stat label="Área por linha na safra" value={fmtNum(areaPorLinhaSafra, 2) + " ha"} />
         <Stat label="Linhas necessárias (exato)" value={fmtNum(linhasNecessarias, 2)} />
         <Stat label="Linhas recomendadas" value={linhasArredondado} tone="blue" />
@@ -425,10 +433,14 @@ function TabDimensionamento() {
       <div className="card">
         <div className="card-title">Sensibilidade por eficiência operacional — {linhasArredondado} linhas, turno de {fmtNum(jornada, 0)}h, {fmtNum(velocidade, 1)} km/h</div>
         <table className="table">
-          <thead><tr><th>Eficiência</th><th>Hectares/turno</th></tr></thead>
+          <thead><tr><th>Eficiência</th><th>Hectares/turno</th><th>Linhas recomendadas</th></tr></thead>
           <tbody>
             {cenarios.map((c) => (
-              <tr key={c.ef}><td>{c.ef}%</td><td className="mono">{fmtNum(c.haTurno, 1)}</td></tr>
+              <tr key={c.ef}>
+                <td>{c.ef}%</td>
+                <td className="mono">{fmtNum(c.haTurno, 1)}</td>
+                <td className="mono">{c.linhasRecomendadasEf}</td>
+              </tr>
             ))}
           </tbody>
         </table>
@@ -582,6 +594,14 @@ const SETORES = [
       { id: "em-breve", label: "Em breve", icon: Info, Comp: () => <TabPlaceholder setor="Colhedoras" /> },
     ],
   },
+  {
+    id: "hf",
+    label: "H&F",
+    icon: Cylinder,
+    tabs: [
+      { id: "em-breve", label: "Em breve", icon: Info, Comp: () => <TabPlaceholder setor="H&F (forrageiras e enfardadeiras)" /> },
+    ],
+  },
 ];
 
 export default function App() {
@@ -589,6 +609,7 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState(SETORES[0].tabs[0].id);
   const [openSetor, setOpenSetor] = useState(null);
   const [menuPos, setMenuPos] = useState(null);
+  const [avisoVisivel, setAvisoVisivel] = useState(true);
   const dropdownRef = useRef(null);
 
   const activeSetor = SETORES.find((s) => s.id === activeSetorId);
@@ -751,6 +772,15 @@ export default function App() {
         .history-item-sub{ font-size:13px; color:var(--muted); }
         .icon-btn{ color:var(--muted); padding:4px; border-radius:5px; }
         .icon-btn:hover{ color:var(--red); background:var(--red-soft); }
+        .aviso-bar{ display:flex; align-items:center; gap:10px; background:var(--blue-soft); color:var(--blue); padding:11px 22px; font-size:13.5px; line-height:1.4; }
+        .aviso-bar strong{ font-weight:600; }
+        .aviso-bar svg{ flex-shrink:0; }
+        .aviso-bar-text{ flex:1; }
+        .aviso-bar-close{ color:var(--blue); opacity:0.6; padding:4px; border-radius:5px; flex-shrink:0; }
+        .aviso-bar-close:hover{ opacity:1; background:rgba(46,53,66,0.1); }
+        @media(max-width:640px){
+          .aviso-bar{ padding:9px 14px; font-size:12px; }
+        }
         @media print{
           .no-print{ display:none !important; }
           .topbar{ display:none !important; }
@@ -776,6 +806,18 @@ export default function App() {
           </div>
         ))}
       </nav>
+
+      {avisoVisivel && (
+        <div className="aviso-bar no-print">
+          <Info size={16} strokeWidth={1.8} />
+          <span className="aviso-bar-text">
+            Este aplicativo foi desenvolvido pelo <strong>time de Marketing Tático</strong>. Encontrou algum erro ou tem alguma sugestão de melhoria? Fale com o time de Marketing Tático.
+          </span>
+          <button className="icon-btn aviso-bar-close" onClick={() => setAvisoVisivel(false)} aria-label="Fechar aviso">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {openSetor && menuPos && createPortal(
         <>
