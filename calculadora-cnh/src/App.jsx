@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Activity, Disc, Tractor, FlaskConical, Save, Download, History, Trash2, Plus, X, ChevronDown, Info, Sprout, Droplets, Wheat, Cylinder } from "lucide-react";
+import { Activity, Disc, Tractor, FlaskConical, Save, Download, History, Trash2, Plus, X, ChevronDown, Info, Sprout, Droplets, Wheat, Cylinder, Puzzle } from "lucide-react";
 import cnhLogo from "./assets/cnh-logo.png";
+import { MARCAS, TRATORES, PLANTADEIRAS, FERRAMENTAS, requisitosPlantadeira, avaliarConjunto } from "./data/portfolio";
 
 /* ---------- helpers ---------- */
 const fmtBRL = (v) => (typeof v === "number" && isFinite(v) ? v : 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
@@ -533,6 +534,252 @@ function TabFertilizante() {
   );
 }
 
+/* ================= TAB 5 — CONJUNTO TRATOR + PLANTADEIRA ================= */
+function SelectField({ label, value, onChange, children }) {
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      <div className="field-row">
+        <select className="field-input" value={value} onChange={(e) => onChange(e.target.value)}>{children}</select>
+      </div>
+    </label>
+  );
+}
+
+const VEREDITO_TXT = {
+  ok: { titulo: "Conjunto compatível", sub: "" },
+  limite: { titulo: "Conjunto compatível — atenção aos detalhes", sub: "" },
+  no: { titulo: "Conjunto não recomendado", sub: "O trator não atende os requisitos da plantadeira." },
+};
+const BADGE_TXT = { ok: "Compatível", limite: "Compatível · atenção", no: "Não recomendado" };
+
+function TabConjunto() {
+  const [cliente, setCliente] = useState("");
+  const [marca, setMarca] = useState("nh");
+  const [tratorNome, setTratorNome] = useState(null);
+  const [vazaoSel, setVazaoSel] = useState(null);
+  const [planterNome, setPlanterNome] = useState(null);
+  const [espSel, setEspSel] = useState(45);
+  const [linhasSel, setLinhasSel] = useState(null);
+  const [ferramenta, setFerramenta] = useState(null);
+  const [turbina, setTurbina] = useState(false);
+  const [taxaVar, setTaxaVar] = useState(false);
+
+  // Trator
+  const tratores = TRATORES.filter((t) => t[marca]);
+  const trator = tratores.find((t) => t[marca] === tratorNome) || tratores[0];
+  const vazaoTrator = trator.vazao.includes(vazaoSel) ? vazaoSel : trator.vazao[0];
+  const gruposTrator = tratores.reduce((acc, t) => { (acc[t.serie] = acc[t.serie] || []).push(t); return acc; }, {});
+
+  // Plantadeira (só as linhas com requisitos informados: PL4000, PL6000 e P7000)
+  const planters = PLANTADEIRAS.filter((p) => p[marca] && FERRAMENTAS[p.linha]);
+  const planter = planters.find((p) => p[marca] === planterNome) || planters[0];
+  const gruposPlanter = planters.reduce((acc, p) => { (acc[p.linha] = acc[p.linha] || []).push(p); return acc; }, {});
+  const espList = Object.keys(planter.linhas).map(Number).sort((a, b) => a - b);
+  const esp = espList.includes(espSel) ? espSel : espList[0];
+  const opcoesLinhas = [].concat(planter.linhas[esp]);
+  const linhas = opcoesLinhas.includes(linhasSel) ? linhasSel : Math.max(...opcoesLinhas);
+  const listaFer = FERRAMENTAS[planter.linha];
+  const fer = listaFer.find((f) => f.id === ferramenta) || listaFer[0];
+  const opts = { ferramenta: fer.id, turbina, taxaVar };
+
+  // Resultado
+  const req = requisitosPlantadeira(planter, linhas, opts);
+  const av = avaliarConjunto(trator, vazaoTrator, req);
+  const fmtCv = (v) => fmtNum(Math.ceil(v), 0);
+  const faixaCv = req.cvMin === req.cvMax ? `${fmtCv(req.cvMax)} cv` : `${fmtCv(req.cvMin)}–${fmtCv(req.cvMax)} cv`;
+  const faixaFer = fer.min === fer.max ? fmtNum(fer.min, 0) : `${fmtNum(fer.min, 1)}–${fmtNum(fer.max, 1)}`;
+  const vzReq = req.plantio === 0 ? "sem exigência" : req.plantio === req.manobra ? `${req.plantio} l/min` : `${req.plantio} plantio · ${req.manobra} manobra`;
+  const cvPorLinha = trator.cv / linhas;
+
+  const subAtencao = av.cvNivel === "limite" && av.vzNivel === "plantio"
+    ? "potência dentro da faixa e vazão justa na manobra: atenção ao terreno e à operação."
+    : av.cvNivel === "limite"
+      ? "potência dentro da faixa: atenção ao tipo de solo e ao terreno."
+      : "a vazão atende o plantio, mas fica justa na manobra.";
+
+  // "Com folga" só quando a margem é real: potência ≥ 15% acima do máximo da faixa e vazão ≥ 10% acima da manobra
+  const folgaCv = trator.cv - req.cvMax;
+  const folgaCvPct = req.cvMax > 0 ? (folgaCv / req.cvMax) * 100 : 0;
+  const cvApertado = av.cvNivel === "ok" && folgaCvPct < 15;
+  const vzApertado = av.vzNivel === "ok" && vazaoTrator < req.manobra * 1.1;
+  const subOk = cvApertado && vzApertado
+    ? "potência e vazão atendem, mas com pouca folga."
+    : cvApertado
+      ? `a potência atende, mas com pouca folga (${fmtCv(folgaCv)} cv, ${fmtNum(folgaCvPct, 0)}% acima do máximo da faixa).`
+      : vzApertado
+        ? "a vazão atende, mas com pouca folga."
+        : "potência e vazão atendem com folga.";
+
+  // Terceiro indicador muda conforme a situação — nunca mostra "negativo em vermelho" quando o trator está dentro da faixa
+  const margemStat = av.cvNivel === "ok"
+    ? { label: "Folga sobre o máximo da faixa", value: `+${fmtCv(folgaCv)} cv (${fmtNum(folgaCvPct, 0)}%)`, tone: "blue" }
+    : av.cvNivel === "limite"
+      ? { label: "Falta para cobrir o máximo da faixa", value: `${fmtCv(-folgaCv)} cv`, tone: "amber" }
+      : { label: "Falta para o mínimo da faixa", value: `${fmtCv(req.cvMin - trator.cv)} cv`, tone: "red" };
+
+  const msgs = [];
+  if (av.cvNivel === "ok") msgs.push({ tom: cvApertado ? "limite" : "ok", t: cvApertado
+    ? `Potência: o trator (${trator.cv} cv) está acima do máximo da faixa (${fmtCv(req.cvMax)} cv), mas com pouca folga: ${fmtCv(folgaCv)} cv (${fmtNum(folgaCvPct, 0)}%). Em condições mais exigentes a demanda pode passar disso.`
+    : `Potência: o trator (${trator.cv} cv) está acima do máximo da faixa (${fmtCv(req.cvMax)} cv), com folga de ${fmtCv(folgaCv)} cv (${fmtNum(folgaCvPct, 0)}%).` });
+  if (av.cvNivel === "limite") msgs.push({ tom: "limite", t: `Potência: o trator (${trator.cv} cv) está dentro da faixa (${faixaCv}): cobre o mínimo com ${fmtCv(trator.cv - req.cvMin)} cv de sobra, mas fica ${fmtCv(req.cvMax - trator.cv)} cv abaixo do máximo — o cenário mais exigente (solo argiloso, declividade e ondulação). Atende; fique atento ao terreno.` });
+  if (av.cvNivel === "no") msgs.push({ tom: "no", t: `Potência: o trator (${trator.cv} cv) está abaixo do mínimo da faixa — faltam pelo menos ${fmtCv(req.cvMin - trator.cv)} cv.` });
+  if (av.vzNivel === "livre") msgs.push({ tom: "ok", t: "Vazão: sem exigência. Sem a turbina a vácuo, o óleo serve só ao levante e aos marcadores — vale a potência." });
+  if (av.vzNivel === "ok") msgs.push({ tom: vzApertado ? "limite" : "ok", t: `Vazão: ${vazaoTrator} l/min atende o plantio${req.manobra !== req.plantio ? " e a manobra" : ""} (${vzReq})${vzApertado ? ", mas com pouca folga" : ""}.` });
+  if (av.vzNivel === "plantio") msgs.push({ tom: "limite", t: `Vazão: ${vazaoTrator} l/min atende o plantio (${req.plantio}), mas fica abaixo do necessário na manobra (${req.manobra}).` });
+  if (av.vzNivel === "no") msgs.push({ tom: "no", t: `Vazão: ${vazaoTrator} l/min é insuficiente — precisa de pelo menos ${req.plantio} l/min.` });
+  const maiorVz = Math.max(...trator.vazao);
+  if (trator.vazao.length > 1 && vazaoTrator !== maiorVz) {
+    const alt = avaliarConjunto(trator, maiorVz, req);
+    const rank = { no: 0, plantio: 1, ok: 2, livre: 2 };
+    if (rank[alt.vzNivel] > rank[av.vzNivel]) msgs.push({ tom: "dica", t: `Dica: pedindo o trator com a vazão opcional de ${maiorVz} l/min, a vazão passa a atender melhor.` });
+  }
+
+  // Mesmo trator × outras plantadeiras da linha, no mesmo espaçamento
+  const comparativo = planters
+    .filter((p) => p.linha === planter.linha && p.linhas[esp] !== undefined)
+    .map((p) => {
+      const n = Math.max(...[].concat(p.linhas[esp]));
+      const r = requisitosPlantadeira(p, n, opts);
+      return { p, nome: p[marca], n, r, a: avaliarConjunto(trator, vazaoTrator, r) };
+    });
+
+  const loadRecord = (rec) => {
+    setCliente(rec.cliente ?? ""); setMarca(rec.marca ?? "nh");
+    setTratorNome(rec.tratorNome ?? null); setVazaoSel(rec.vazaoSel ?? null);
+    setPlanterNome(rec.planterNome ?? null); setEspSel(rec.espSel ?? 45); setLinhasSel(rec.linhasSel ?? null);
+    setFerramenta(rec.ferramenta ?? null); setTurbina(rec.turbina ?? false); setTaxaVar(rec.taxaVar ?? false);
+  };
+
+  return (
+    <div className="module">
+      <TabHeader icon={Puzzle} eyebrow="Aba 05" title="Conjunto trator + plantadeira"
+        description="Monte combinações de trator e plantadeira e veja na hora se a potência e a vazão hidráulica atendem. Troque qualquer item e compare."
+        cliente={cliente} setCliente={setCliente} />
+
+      <div className="grid-2">
+        <div className="card">
+          <div className="card-title">Trator</div>
+          <div className="cultura-row">
+            <span className="field-label">Marca</span>
+            <Segmented value={marca} onChange={setMarca} options={MARCAS} />
+          </div>
+          <div className="card-grid" style={{ gridTemplateColumns: "1fr" }}>
+            <SelectField label="Modelo" value={trator[marca]} onChange={setTratorNome}>
+              {Object.entries(gruposTrator).map(([serie, ts]) => (
+                <optgroup key={serie} label={serie}>
+                  {ts.map((t) => <option key={t[marca]} value={t[marca]}>{t[marca]} — {t.cv} cv</option>)}
+                </optgroup>
+              ))}
+            </SelectField>
+          </div>
+          {trator.vazao.length > 1 && (
+            <div className="cultura-row" style={{ marginTop: 14 }}>
+              <span className="field-label">Vazão hidráulica (opcional no pedido)</span>
+              <Segmented value={vazaoTrator} onChange={setVazaoSel} options={trator.vazao.map((v) => ({ value: v, label: `${v} l/min` }))} />
+            </div>
+          )}
+          <div className="mini-stats conj">
+            <Stat label="Potência" value={`${trator.cv} cv`} />
+            <Stat label="Vazão" value={`${fmtNum(vazaoTrator, vazaoTrator % 1 ? 1 : 0)} l/min`} />
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Plantadeira</div>
+          <div className="card-grid" style={{ gridTemplateColumns: "1fr" }}>
+            <SelectField label="Modelo" value={planter[marca]} onChange={setPlanterNome}>
+              {Object.entries(gruposPlanter).map(([linha, ps]) => (
+                <optgroup key={linha} label={linha}>
+                  {ps.map((p) => <option key={p[marca]} value={p[marca]}>{p[marca]}</option>)}
+                </optgroup>
+              ))}
+            </SelectField>
+            <SelectField label="Espaçamento entrelinhas" value={esp} onChange={(v) => setEspSel(Number(v))}>
+              {espList.map((e) => <option key={e} value={e}>{e} cm</option>)}
+            </SelectField>
+            {listaFer.length > 1 && (
+              <SelectField label="Ferramenta de adubo" value={fer.id} onChange={setFerramenta}>
+                {listaFer.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </SelectField>
+            )}
+          </div>
+          {opcoesLinhas.length > 1 && (
+            <div className="cultura-row" style={{ marginTop: 14 }}>
+              <span className="field-label">Configuração de linhas a {esp} cm</span>
+              <Segmented value={linhas} onChange={setLinhasSel} options={opcoesLinhas.map((n) => ({ value: n, label: `${n} linhas` }))} />
+            </div>
+          )}
+          {planter.linha === "PL4000" && (
+            <div className="cultura-row" style={{ marginTop: 14 }}>
+              <span className="field-label">Turbina a vácuo (opcional)</span>
+              <Segmented value={turbina} onChange={setTurbina} options={[{ value: false, label: "Não" }, { value: true, label: "Sim" }]} />
+            </div>
+          )}
+          {planter.linha === "PL6000" && (
+            <div className="cultura-row" style={{ marginTop: 14 }}>
+              <span className="field-label">Taxa variável</span>
+              <Segmented value={taxaVar} onChange={setTaxaVar} options={[{ value: false, label: "Sem" }, { value: true, label: "Com" }]} />
+            </div>
+          )}
+          <div className="mini-stats conj">
+            <Stat label="Linhas" value={linhas} />
+            <Stat label={`Potência exigida (${faixaFer} cv/linha)`} value={faixaCv} />
+            <Stat label={req.plantio !== req.manobra ? "Vazão exigida (plantio / manobra)" : "Vazão exigida"}
+              value={req.plantio === 0 ? "sem exigência" : req.plantio === req.manobra ? `${req.plantio} l/min` : `${req.plantio} / ${req.manobra} l/min`} />
+          </div>
+        </div>
+      </div>
+
+      <div className={"veredito veredito-" + av.veredito}>
+        <div className="veredito-titulo">{VEREDITO_TXT[av.veredito].titulo}</div>
+        <div className="veredito-sub">{trator[marca]} + {planter[marca]} ({linhas} linhas a {esp} cm) — {av.veredito === "limite" ? subAtencao : av.veredito === "ok" ? subOk : VEREDITO_TXT[av.veredito].sub}</div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">Análise do conjunto</div>
+        <div className="result-band">
+          <Stat label="Potência disponível por linha" value={`${fmtNum(cvPorLinha, 1)} cv`} tone={av.cvNivel === "no" ? "red" : "blue"} />
+          <Stat label="Faixa necessária por linha" value={`${faixaFer} cv`} />
+          {req.cvMin !== req.cvMax && av.cvNivel !== "no" && (
+            <Stat label="Folga sobre o mínimo da faixa" value={`+${fmtCv(trator.cv - req.cvMin)} cv (${fmtNum(((trator.cv - req.cvMin) / req.cvMin) * 100, 0)}%)`} tone="blue" />
+          )}
+          <Stat {...margemStat} />
+        </div>
+        <ul className="analise-lista">
+          {msgs.map((m, i) => <li key={i} className={"analise-" + m.tom}>{m.t}</li>)}
+        </ul>
+      </div>
+
+      <div className="card">
+        <div className="card-title">{trator[marca]} com outras plantadeiras {planter.linha} a {esp} cm</div>
+        <p className="card-note">Clique em uma linha para trocar a plantadeira do conjunto. Usa a mesma ferramenta de adubo e as mesmas opções escolhidas acima.</p>
+        <table className="table">
+          <thead><tr><th>Plantadeira</th><th>Linhas</th><th>Potência exigida</th><th>Vazão exigida</th><th>Resultado</th></tr></thead>
+          <tbody>
+            {comparativo.map((c) => (
+              <tr key={c.nome} className={"linha-clicavel" + (c.nome === planter[marca] ? " atual" : "")} onClick={() => { setPlanterNome(c.nome); setLinhasSel(null); }}>
+                <td className="mono">{c.nome}</td>
+                <td className="mono">{c.n}</td>
+                <td className="mono">{c.r.cvMin === c.r.cvMax ? fmtCv(c.r.cvMax) : `${fmtCv(c.r.cvMin)}–${fmtCv(c.r.cvMax)}`} cv</td>
+                <td className="mono">{c.r.plantio === 0 ? "—" : c.r.plantio === c.r.manobra ? c.r.plantio : `${c.r.plantio}/${c.r.manobra}`}</td>
+                <td><span className={"badge badge-" + c.a.veredito}>{BADGE_TXT[c.a.veredito]}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <PrintFoot text="Potência exigida = cv/linha da ferramenta de adubo × nº de linhas. As faixas representam tipo de solo (arenoso exige menos, argiloso mais), declividade e ondulação do terreno — são referências, não limites, e podem ser ultrapassadas conforme as condições." />
+
+      <HistoryPanel tabId="conjunto"
+        record={{ label: cliente || `${trator[marca]} + ${planter[marca]}`, cliente, marca, tratorNome: trator[marca], vazaoSel: vazaoTrator, planterNome: planter[marca], espSel: esp, linhasSel: linhas, ferramenta: fer.id, turbina, taxaVar }}
+        onLoad={loadRecord} />
+      <PrintButton />
+    </div>
+  );
+}
+
 function PrintFoot({ text }) {
   return <div className="print-foot">{text}</div>;
 }
@@ -568,6 +815,7 @@ const SETORES = [
       { id: "disco", label: "Perda por disco", icon: Disc, Comp: TabDisco },
       { id: "dimensionamento", label: "Dimensionamento", icon: Tractor, Comp: TabDimensionamento },
       { id: "fertilizante", label: "Fertilizante", icon: FlaskConical, Comp: TabFertilizante },
+      { id: "conjunto", label: "Conjunto", icon: Puzzle, Comp: TabConjunto },
     ],
   },
   {
@@ -723,6 +971,9 @@ export default function App() {
         .stat-label{ font-size:12px; color:var(--muted); margin-top:2px; }
         .tone-red .stat-value{ color:var(--red); }
         .tone-blue .stat-value{ color:var(--blue); }
+        .tone-amber .stat-value{ color:#9A5A16; }
+        .mini-stats.conj .stat{ min-width:100px; }
+        .mini-stats.conj .stat-value{ font-size:18px; }
         .result-band{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
         .result-band .stat{ min-width:130px; }
         .add-row{ display:flex; gap:8px; margin-bottom:12px; }
@@ -781,6 +1032,22 @@ export default function App() {
         @media(max-width:640px){
           .aviso-bar{ padding:9px 14px; font-size:12px; }
         }
+        .veredito{ border-radius:12px; padding:16px 20px; margin-bottom:16px; border:1px solid transparent; }
+        .veredito-titulo{ font-family:'Oswald',sans-serif; font-size:21px; font-weight:600; }
+        .veredito-sub{ font-size:14px; margin-top:3px; }
+        .veredito-ok{ background:var(--blue-soft); color:var(--blue); border-color:#C9D6EF; }
+        .veredito-limite{ background:#FCE9D9; color:#9A5A16; border-color:#F1D2B3; }
+        .veredito-no{ background:var(--red-soft); color:var(--red); border-color:#EBCBCB; }
+        .badge{ display:inline-block; padding:3px 10px; border-radius:12px; font-size:12.5px; font-weight:600; white-space:nowrap; }
+        .badge-ok{ background:var(--blue-soft); color:var(--blue); }
+        .badge-limite{ background:#FCE9D9; color:#9A5A16; }
+        .badge-no{ background:var(--red-soft); color:var(--red); }
+        .linha-clicavel{ cursor:pointer; }
+        .linha-clicavel:hover td{ background:var(--panel-2); }
+        .linha-clicavel.atual td{ background:var(--blue-soft); }
+        .analise-lista{ margin:0; padding-left:20px; display:flex; flex-direction:column; gap:7px; font-size:14.5px; line-height:1.5; }
+        .analise-ok::marker{ color:var(--blue); } .analise-limite::marker{ color:#9A5A16; } .analise-no::marker{ color:var(--red); } .analise-dica{ color:var(--muted); }
+        select.field-input{ cursor:pointer; }
         @media print{
           .no-print{ display:none !important; }
           .topbar{ display:none !important; }
